@@ -22,7 +22,7 @@ class NoorAIApp extends StatelessWidget
           ),
           useMaterial3: true,
         ),
-      home: const chatScreen(),
+      home: const ChatScreen(),
     );
   }
 }

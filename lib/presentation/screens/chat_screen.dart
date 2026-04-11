@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 
-class chatScreen extends StatelessWidget{
-  const chatScreen({super.key});
+class ChatScreen extends StatefulWidget {
+  const ChatScreen({super.key});
 
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -17,7 +22,7 @@ class chatScreen extends StatelessWidget{
       ),
       body: const Center(
         child: Text(
-          'Chat Interface Will be Here...',
+          'Converted to StatefulWidget...',
           style: TextStyle(
             fontSize: 16,
           ),
@@ -25,6 +30,4 @@ class chatScreen extends StatelessWidget{
       ),
     );
   }
-
-
 }
