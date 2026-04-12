@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'presentation/screens/chat_screen.dart';
+import 'presentation/screens/login_screen.dart';
 
 void main()
 {
@@ -22,7 +22,7 @@ class NoorAIApp extends StatelessWidget
           ),
           useMaterial3: true,
         ),
-      home: const ChatScreen(),
+        home: const LoginScreen(),
     );
   }
 }
