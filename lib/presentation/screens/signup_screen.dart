@@ -90,12 +90,29 @@ class _SignupScreenState extends State<SignupScreen> {
                       ),
                     ),
                     onPressed: () {
-
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Account creation feature coming soon!'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
                     },
                     child: const Text(
                       'Sign Up',
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  child: Text(
+                    "Already have an account? Login",
+                    style: TextStyle(color: Theme.of(context).colorScheme.primary),
                   ),
                 ),
               ],
