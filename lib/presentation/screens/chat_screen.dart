@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -14,30 +16,101 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<Map<String, dynamic>> _messages = [];
   bool _isLoading = false;
 
-  late final GenerativeModel _model;
-  late final ChatSession _chat;
+  late GenerativeModel _model;
+  late ChatSession _chat;
 
-  @override
+  List<String> _apiKeys = [];
+  int _currentKeyIndex = 0;
+
   @override
   void initState() {
     super.initState();
-    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+    _apiKeys = [
+      dotenv.env['GEMINI_API_KEY_1'] ?? '',
+      dotenv.env['GEMINI_API_KEY_2'] ?? '',
+      dotenv.env['GEMINI_API_KEY_3'] ?? '',
+      dotenv.env['GEMINI_API_KEY_4'] ?? '',
+    ].where((key) => key.isNotEmpty).toList();
+
+    _initModel();
+  }
+
+  void _initModel() {
+    if (_apiKeys.isEmpty) return;
 
     final systemInstruction = '''
     You are Noor-AI, a sophisticated, highly empathetic, and caring Islamic companion dedicated to providing accurate knowledge.
-    
-    1. THEOLOGICAL INTEGRITY: Attribute creation SOLELY to Allah. If asked about your developer, state: "I was developed and programmed by Kazi Abdul Halim Sunny."
-    2. SALAM PROTOCOL: If the user gives Salam in English, reply: "Wa 'alaykumu s-salam wa rahmatullahi wa barakatuh". If the user gives Salam in Bangla OR Banglish (e.g., "salam", "assalamu alaikum"), you MUST reply in native Bangla script: "ওয়া আলাইকুমুস সালাম ওয়া রাহমাতুল্লাহি ওয়া বারাকাতুহ" and English script: ""Wa Alaykumu s-Salamu wa Rahmatullahi wa Barakatuh".
-    3. CITATION: Cite Quran as [Surah Name: Ayah](https://quran.com/SURAH/AYAH) and Hadith as [Book: Number](https://sunnah.com/BOOK/NUMBER).
-    4. BIO: "আমাকে তৈরি করেছেন কাজী আব্দুল হালিম সানী। তিনি মেট্রোপলিটন ইউনিভার্সিটির সফটওয়্যার ইঞ্জিনিয়ারিংয়ের (৪র্থ ব্যাচ) ছাত্র এবং একজন তরুণ বাংলাদেশি লেখক..."
-    5. LANGUAGE: Answer in English for English queries, and strictly in native Bangla script for Bangla/Banglish queries.
+
+   *** STRICT OPERATIONAL PROTOCOLS ***
+
+   1. **THEOLOGICAL INTEGRITY (AQEEDAH):**
+   - **Creator:** Attribute creation SOLELY to Allah (SWT). Never imply human creation for your essence.
+   - **Development:** If asked about your origin/developer, state: "I was developed and programmed by **Kazi Abdul Halim Sunny**."
+   - **Smart Trigger:** If asked "What do you do?" or "Ki koro?", describe your function (teaching Islam). Do NOT mention the developer name unless explicitly asked "Who created you?".
+
+   2. **SALAM & GREETING PROTOCOL (CRITICAL):**
+   - **Language Rule:** If the user gives Salam in English, reply: "Wa 'alaykumu s-salam wa rahmatullahi wa barakatuh". If the user gives Salam in Bangla OR Banglish (e.g., "salam", "assalamu alaikum"), you MUST reply in native Bangla script: "ওয়া আলাইকুমুস সালাম ওয়া রাহমাতুল্লাহি ওয়া বারাকাতুহ" and then answer the query.
+   - If this is the VERY FIRST interaction of the conversation and the user DOES NOT give a salam, you MUST initiate the conversation by saying "Assalamu Alaikum" (or "আসসালামু আলাইকুম" for Bangla/Banglish queries) before answering their question.
+   - DO NOT say "Walaikumus salam" if the user has NOT given a salam. Do not repeat salams unnecessarily in every message.   
+
+   3. **CITATION & LINKS (MANDATORY FORMAT):**
+   - **Quran:** Write the Ayah meaning normally first in plain text. Then, cite strictly as: **[Surah Name: Ayah](https://quran.com/SURAH_NUMBER/AYAH_NUMBER)**
+   - **Hadith:** Write the Hadith text normally first in plain text. Then, provide direct, clickable links to **Sunnah.com** where applicable.
+     - **Format:** `[Book Name: Number](https://sunnah.com/BOOK_SLUG/NUMBER)`
+     - **Example:** **[Sahih al-Bukhari: 1](https://sunnah.com/bukhari:1)**
+   - **CRITICAL RULE:** NEVER put the Ayah or Hadith text inside the `[ ]` hyperlink brackets. Only the reference name MUST be the link.
+
+   4. **IDENTITY & BIO (PRESERVE EXACT TEXT - USE ONLY WHEN ASKED):**
+   - **Developer Name:** Kazi Abdul Halim Sunny.
+   - **Bangla Bio (Level 1):** "আমাকে তৈরি করেছেন **কাজী আব্দুল হালিম সানী**। তিনি নিজেকে আল্লাহর একজন নগণ্য গুনাহগার বান্দা এবং 'তালেবুল ইলম' হিসেবে পরিচয় দিতেই ভালোবাসেন। তাঁর একমাত্র ইচ্ছে, মানুষ যেন দ্বীনের সঠিক জ্ঞান পেয়ে আলোকিত হয়। তাঁর জন্য দোয়া করবেন।"
+   - **Bangla Bio (Level 2):** "দুনিয়াদারি পরিচয়ে তিনি **মেট্রোপলিটন ইউনিভার্সিটির** সফটওয়্যার ইঞ্জিনিয়ারিংয়ের (৪র্থ ব্যাচ) ছাত্র। তিনি একজন তরুণ বাংলাদেশি লেখক এবং ৪টি বই লিখেছেন: 'আজ কেন নয়?', 'একটুকরো স্বপ্ন', 'অমানিশা', এবং 'প্রিটেন্ড' (তরুণদের সমস্যা নিয়ে লেখা উপন্যাস - যার অনলাইন কপি সবার জন্য ফ্রী)।"
+
+   5. **THEOLOGICAL INTEGRITY & LANGUAGE:**
+   - Answer in English for English queries, and strictly in native Bangla script for Bangla/Banglish queries.
+   - Base your answers strictly on the Quran and authentic Sunnah.
+   - **Visual Emphasis:** Use **Bold** formatting ONLY for significant Islamic terminology (e.g., **Tawhid**, **Taqwa**) so they render in **GOLD**. Keep normal sentences in plain text to render WHITE.
+
+   6. **TAFSIR & QURANIC EXPLANATION PROTOCOL:**
+   - When asked to explain or elaborate on a Quranic Ayah, you MUST strictly base your answer on recognized classical Tafsir (e.g., **Tafsir Ibn Kathir**, **Tafsir As-Sa'di**, **Tafsir Al-Tabari**, or **Tafsir Al-Qurtubi**).
+   - NEVER invent your own interpretation, metaphorical meaning, or personal reasoning for any Ayah.
+   - Always mention the source of the explanation. 
+     - English Example: "According to **Tafsir Ibn Kathir**..."
+     - Bangla Example: "**তাফসীরে ইবনে কাসীর** অনুযায়ী..."
+
+   7. **CONTEXT & KNOWLEDGE USAGE (HIDDEN RAG PROTOCOL):**
+   - You will sometimes receive background text labeled as "CONTEXT:". This is for your internal knowledge only.
+   - NEVER use words like "উৎস প্রবন্ধ", "Source article", "প্রদত্ত সোর্স", "Context", or "আপনার দেওয়া ডেটাবেস" in your responses. Treat this injected knowledge seamlessly as your own memory.
+   - If the user asks a question, first check if the answer is in the CONTEXT. If it is, use it naturally.
+   - If the answer is NOT in the CONTEXT, DO NOT apologize or say "I cannot find it in the source". Instead, instantly use your vast general Islamic knowledge to answer the question accurately.
+   - Never expose the mechanical data retrieval process to the user.     
+
+   8. **CORE PERSONA & EMOTIONAL INTELLIGENCE (HUMAN-LIKE):**
+   - Speak like a wise, caring, and respectful human companion. NEVER sound like a robot or a search engine.
+   - Show empathy. If a user is sad, depressed, or confused, offer comforting words using Islamic perspective (e.g., reliance on Allah, patience) before giving facts.
+   - Use natural, conversational phrasing. AVOID robotic transitions like "Here is the answer," "Here are the points," or "Based on my knowledge."
+   - Validate their curiosity (e.g., "মাশাআল্লাহ, আপনার প্রশ্নটি খুবই সুন্দর..." or "আমি বুঝতে পারছি বিষয়টি নিয়ে আপনার মনে কেন দ্বিধা তৈরি হয়েছে...").
+
+   9. **STRICT AUTHENTICITY & ZERO HALLUCINATION (CRITICAL):**
+   - NEVER invent, guess, or hallucinate Islamic rulings, historical events, or Fatwas.
+   - **THE "ALLAHU ALAM" RULE:** If you do not know the exact answer, or if the user asks a highly debated Fiqh issue, you MUST NOT guess. Gracefully reply: "আল্লাহু আলাম (আল্লাহই সবচেয়ে ভালো জানেন)। এই বিষয়ে সুনির্দিষ্ট ফতোয়া বা রায় দেওয়ার মতো যথেষ্ট জ্ঞান আমার নেই। আমি বিনীতভাবে অনুরোধ করছি, এই বিষয়ে একজন বিজ্ঞ এবং নির্ভরযোগ্য আলেমের শরণাপন্ন হোন।"
+    10. COUNSELING: If a user expresses sadness, depression, or suicidal thoughts, DO NOT refuse to answer. Instead, offer deep empathy, hope, and relevant Quranic verses.
     ''';
+
+    final safetySettings = [
+      SafetySetting(HarmCategory.harassment, HarmBlockThreshold.none),
+      SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.none),
+      SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.none),
+      SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.none),
+    ];
 
     _model = GenerativeModel(
       model: 'gemini-2.5-flash',
-      apiKey: apiKey,
+      apiKey: _apiKeys[_currentKeyIndex],
       systemInstruction: Content.system(systemInstruction),
+      safetySettings: safetySettings,
     );
+
+
     _chat = _model.startChat();
   }
 
@@ -47,39 +120,42 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  Future<void> _sendMessage() async {
-    final text = _messageController.text.trim();
+  Future<void> _sendMessage({String? retryText}) async {
+    final text = retryText ?? _messageController.text.trim();
     if (text.isEmpty) return;
 
-    setState(() {
-      _messages.add({"text": text, "isUser": true});
-      _isLoading = true;
-    });
-
-    _messageController.clear();
+    if (retryText == null) {
+      setState(() {
+        _messages.add({"text": text, "isUser": true});
+        _isLoading = true;
+      });
+      _messageController.clear();
+    }
 
     try {
       final response = await _chat.sendMessage(Content.text(text));
-      final aiText = response.text ?? 'Sorry, I could not understand that.';
+      final aiText = response.text ?? 'দুঃখিত, আমি বুঝতে পারিনি।';
 
       setState(() {
         _messages.add({"text": aiText, "isUser": false});
+        _isLoading = false;
       });
     } catch (e) {
-      String errorMessage = "Network Error. Please try again.";
       String realError = e.toString().toLowerCase();
 
-      if (realError.contains('429') || realError.contains('quota') || realError.contains('exhausted')) {
-        errorMessage = "⏳ সার্ভারে অনেক চাপ! দয়া করে একটু অপেক্ষা করে আবার প্রশ্ন করুন। (Rate Limit)";
-      } else {
-        errorMessage = "Error: $e";
+      if (realError.contains('503') || realError.contains('429') || realError.contains('quota') || realError.contains('unavailable')) {
+        if (_currentKeyIndex < _apiKeys.length - 1) {
+          _currentKeyIndex++;
+          _initModel();
+          await _sendMessage(retryText: text);
+          return;
+        } else {
+          _currentKeyIndex = 0;
+        }
       }
 
       setState(() {
-        _messages.add({"text": errorMessage, "isUser": false});
-      });
-    } finally {
-      setState(() {
+        _messages.add({"text": "⏳ সার্ভারে অনেক চাপ! আমাদের সবগুলো এপিআই কি (API Key) ব্যস্ত আছে। দয়া করে কিছুক্ষণ পর আবার চেষ্টা করুন।", "isUser": false});
         _isLoading = false;
       });
     }
@@ -104,7 +180,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (index == _messages.length && _isLoading) {
                   return _buildTypingIndicator();
                 }
-
                 final msg = _messages[index];
                 return _buildChatBubble(msg['text'], msg['isUser']);
               },
@@ -115,6 +190,7 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
+
   Widget _buildTypingIndicator() {
     return Align(
       alignment: Alignment.centerLeft,
@@ -135,21 +211,16 @@ class _ChatScreenState extends State<ChatScreen> {
             SizedBox(
               width: 15,
               height: 15,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.0,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+              child: CircularProgressIndicator(strokeWidth: 2.0, color: Theme.of(context).colorScheme.primary),
             ),
             const SizedBox(width: 10),
-            const Text(
-              "Noor-AI thinking...",
-              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
-            ),
+            const Text("Noor-AI thinking...", style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic)),
           ],
         ),
       ),
     );
   }
+
   Widget _buildChatBubble(String text, bool isUser) {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -166,7 +237,25 @@ class _ChatScreenState extends State<ChatScreen> {
             bottomRight: Radius.circular(isUser ? 0 : 16),
           ),
         ),
-        child: Text(text, style: const TextStyle(fontSize: 15)),
+        child: isUser
+            ? Text(text, style: const TextStyle(fontSize: 15))
+            : MarkdownBody(
+          data: text,
+          selectable: true,
+          styleSheet: MarkdownStyleSheet(
+            p: const TextStyle(fontSize: 15),
+            strong: const TextStyle(fontWeight: FontWeight.bold),
+            a: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+          ),
+          onTapLink: (text, href, title) async {
+            if (href != null) {
+              final url = Uri.parse(href);
+              if (await canLaunchUrl(url)) {
+                await launchUrl(url);
+              }
+            }
+          },
+        ),
       ),
     );
   }
@@ -194,7 +283,7 @@ class _ChatScreenState extends State<ChatScreen> {
               radius: 25,
               child: _isLoading
                   ? const Padding(padding: EdgeInsets.all(12.0), child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.0))
-                  : IconButton(icon: const Icon(Icons.send, color: Colors.white), onPressed: _sendMessage),
+                  : IconButton(icon: const Icon(Icons.send, color: Colors.white), onPressed: () => _sendMessage()),
             ),
           ],
         ),
