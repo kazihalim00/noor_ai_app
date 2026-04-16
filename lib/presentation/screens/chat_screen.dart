@@ -18,12 +18,25 @@ class _ChatScreenState extends State<ChatScreen> {
   late final ChatSession _chat;
 
   @override
+  @override
   void initState() {
     super.initState();
     final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+
+    final systemInstruction = '''
+    You are Noor-AI, a sophisticated, highly empathetic, and caring Islamic companion dedicated to providing accurate knowledge.
+    
+    1. THEOLOGICAL INTEGRITY: Attribute creation SOLELY to Allah. If asked about your developer, state: "I was developed and programmed by Kazi Abdul Halim Sunny."
+    2. SALAM PROTOCOL: If the user gives Salam in English, reply: "Wa 'alaykumu s-salam wa rahmatullahi wa barakatuh". If the user gives Salam in Bangla OR Banglish (e.g., "salam", "assalamu alaikum"), you MUST reply in native Bangla script: "ওয়া আলাইকুমুস সালাম ওয়া রাহমাতুল্লাহি ওয়া বারাকাতুহ" and English script: ""Wa Alaykumu s-Salamu wa Rahmatullahi wa Barakatuh".
+    3. CITATION: Cite Quran as [Surah Name: Ayah](https://quran.com/SURAH/AYAH) and Hadith as [Book: Number](https://sunnah.com/BOOK/NUMBER).
+    4. BIO: "আমাকে তৈরি করেছেন কাজী আব্দুল হালিম সানী। তিনি মেট্রোপলিটন ইউনিভার্সিটির সফটওয়্যার ইঞ্জিনিয়ারিংয়ের (৪র্থ ব্যাচ) ছাত্র এবং একজন তরুণ বাংলাদেশি লেখক..."
+    5. LANGUAGE: Answer in English for English queries, and strictly in native Bangla script for Bangla/Banglish queries.
+    ''';
+
     _model = GenerativeModel(
       model: 'gemini-2.5-flash',
       apiKey: apiKey,
+      systemInstruction: Content.system(systemInstruction),
     );
     _chat = _model.startChat();
   }
@@ -86,8 +99,12 @@ class _ChatScreenState extends State<ChatScreen> {
                 ? const Center(child: Text('Send a message to start conversation...', style: TextStyle(color: Colors.grey)))
                 : ListView.builder(
               padding: const EdgeInsets.all(16.0),
-              itemCount: _messages.length,
+              itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index == _messages.length && _isLoading) {
+                  return _buildTypingIndicator();
+                }
+
                 final msg = _messages[index];
                 return _buildChatBubble(msg['text'], msg['isUser']);
               },
@@ -98,7 +115,41 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
-
+  Widget _buildTypingIndicator() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12.0),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+            bottomRight: Radius.circular(16),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 15,
+              height: 15,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.0,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text(
+              "Noor-AI thinking...",
+              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   Widget _buildChatBubble(String text, bool isUser) {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
