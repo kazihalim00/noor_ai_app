@@ -3,6 +3,7 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'daily_reminder_slider.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -162,6 +163,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -170,6 +172,8 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
+          const DailyReminderSlider(),
+
           Expanded(
             child: _messages.isEmpty
                 ? const Center(child: Text('Send a message to start conversation...', style: TextStyle(color: Colors.grey)))
