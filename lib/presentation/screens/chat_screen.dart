@@ -11,6 +11,7 @@ import 'package:printing/printing.dart';
 import 'package:http/http.dart' as http;
 import 'daily_reminder_slider.dart';
 import 'package:noor_ai_app/main.dart';
+import 'login_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -72,11 +73,31 @@ class _ChatScreenState extends State<ChatScreen> {
   void _initModel() {
     if (_apiKeys.isEmpty) return;
 
-    List<Content> history = _messages.map((msg) {
-      return msg['isUser']
-          ? Content.text(msg['text'])
-          : Content.model([TextPart(msg['text'])]);
-    }).toList();
+    List<Content> history = [];
+    String lastRole = '';
+    String combinedText = '';
+
+    for (int i = 0; i < _messages.length; i++) {
+      var msg = _messages[i];
+      if (!msg['isUser'] && (msg['text'].contains('⏳') || msg['text'].contains('busy'))) continue;
+      if (i == _messages.length - 1 && msg['isUser']) continue;
+
+      String currentRole = msg['isUser'] ? 'user' : 'model';
+
+      if (currentRole == lastRole) {
+        combinedText += "\n" + msg['text'];
+      } else {
+        if (lastRole.isNotEmpty) {
+          history.add(lastRole == 'user' ? Content.text(combinedText) : Content.model([TextPart(combinedText)]));
+        }
+        combinedText = msg['text'];
+        lastRole = currentRole;
+      }
+    }
+
+    if (lastRole == 'model') {
+      history.add(Content.model([TextPart(combinedText)]));
+    }
 
     final systemInstruction = '''
  You are Noor-AI, a sophisticated, highly empathetic, and caring Islamic companion dedicated to providing accurate knowledge.
@@ -152,52 +173,65 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _exportChatToPDF() async {
     if (_messages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ডাউনলোড করার মতো কোনো চ্যাট নেই!')),
+        const SnackBar(content: Text('No chat history available to download!')),
       );
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('পিডিএফ তৈরি হচ্ছে, দয়া করে অপেক্ষা করুন...')),
+      const SnackBar(content: Text('Generating PDF, please wait...')),
     );
 
     try {
       final pdf = pw.Document();
       final banglaFont = await PdfGoogleFonts.notoSansBengaliRegular();
       final boldFont = await PdfGoogleFonts.notoSansBengaliBold();
+      final arabicFont = await PdfGoogleFonts.amiriRegular();
 
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(40),
           build: (pw.Context context) {
-            return [
+            List<pw.Widget> pdfContent = [
               pw.Header(
                 level: 0,
                 child: pw.Text('Noor-AI Chat History', style: pw.TextStyle(font: boldFont, fontSize: 24, color: PdfColors.teal)),
               ),
-              ..._messages.expand((msg) {
-                final isUser = msg['isUser'];
-                return [
-                  pw.Text(
-                    isUser ? 'You:' : 'Noor-AI:',
-                    style: pw.TextStyle(
-                        font: boldFont,
-                        fontSize: 14,
-                        color: isUser ? PdfColors.blue800 : PdfColors.teal800
-                    ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    msg['text'],
-                    style: pw.TextStyle(font: banglaFont, fontSize: 12),
-                  ),
-                  pw.SizedBox(height: 20),
-                  pw.Divider(color: PdfColors.grey300),
-                  pw.SizedBox(height: 10),
-                ];
-              }),
+              pw.SizedBox(height: 20),
             ];
+
+            for (var msg in _messages) {
+              final isUser = msg['isUser'];
+              pdfContent.add(
+                pw.Text(
+                  isUser ? 'You:' : 'Noor-AI:',
+                  style: pw.TextStyle(font: boldFont, fontSize: 14, color: isUser ? PdfColors.blue800 : PdfColors.teal800),
+                ),
+              );
+              pdfContent.add(pw.SizedBox(height: 4));
+
+              final lines = msg['text'].toString().split('\n');
+              for (var line in lines) {
+                if (line.trim().isNotEmpty) {
+                  pdfContent.add(
+                    pw.Paragraph(
+                      text: line,
+                      style: pw.TextStyle(
+                          font: banglaFont,
+                          fontFallback: [arabicFont],
+                          fontSize: 12
+                      ),
+                    ),
+                  );
+                }
+              }
+              pdfContent.add(pw.SizedBox(height: 10));
+              pdfContent.add(pw.Divider(color: PdfColors.grey300));
+              pdfContent.add(pw.SizedBox(height: 10));
+            }
+
+            return pdfContent;
           },
         ),
       );
@@ -211,8 +245,36 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _callGroqBackup(String text) async {
+  Future<void> _callGroqBackup() async {
     if (_groqKey == null || _groqKey!.isEmpty) throw Exception("No Backup Key");
+
+    List<Map<String, String>> groqHistory = [
+      {"role": "system", "content": "You are Noor-AI, an Islamic companion. Follow previous instructions strictly."}
+    ];
+
+    String lastRole = '';
+    String combinedText = '';
+
+    for (int i = 0; i < _messages.length; i++) {
+      var msg = _messages[i];
+      if (!msg['isUser'] && (msg['text'].contains('⏳') || msg['text'].contains('busy'))) continue;
+
+      String currentRole = msg['isUser'] ? 'user' : 'assistant';
+
+      if (currentRole == lastRole) {
+        combinedText += "\n" + msg['text'];
+      } else {
+        if (lastRole.isNotEmpty) {
+          groqHistory.add({"role": lastRole, "content": combinedText});
+        }
+        combinedText = msg['text'];
+        lastRole = currentRole;
+      }
+    }
+
+    if (lastRole.isNotEmpty) {
+      groqHistory.add({"role": lastRole, "content": combinedText});
+    }
 
     final url = Uri.parse('https://api.groq.com/openai/v1/chat/completions');
     final response = await http.post(
@@ -223,10 +285,7 @@ class _ChatScreenState extends State<ChatScreen> {
       },
       body: jsonEncode({
         "model": "llama-3.3-70b-versatile",
-        "messages": [
-          {"role": "system", "content": "You are Noor-AI, an Islamic companion. Follow previous instructions strictly."},
-          {"role": "user", "content": text}
-        ]
+        "messages": groqHistory
       }),
     );
 
@@ -258,7 +317,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final response = await _chat.sendMessage(Content.text(text));
-      final aiText = response.text ?? 'দুঃখিত, আমি বুঝতে পারিনি।';
+      final aiText = response.text ?? 'Sorry, I could not understand.';
 
       setState(() {
         _messages.add({"text": aiText, "isUser": false});
@@ -276,10 +335,10 @@ class _ChatScreenState extends State<ChatScreen> {
           return;
         } else {
           try {
-            await _callGroqBackup(text);
+            await _callGroqBackup();
           } catch (backupErr) {
             setState(() {
-              _messages.add({"text": "⏳ সার্ভারে অনেক চাপ! আমাদের সবগুলো এপিআই কি ব্যস্ত আছে। দয়া করে কিছুক্ষণ পর আবার চেষ্টা করুন।", "isUser": false});
+              _messages.add({"text": "⏳ All servers are currently busy. Please try again later.", "isUser": false});
               _isLoading = false;
             });
           }
@@ -299,7 +358,6 @@ class _ChatScreenState extends State<ChatScreen> {
         title: const Text("Noor-AI: Islamic Companion", style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         actions: [
-          // থিম টগল বাটন
           IconButton(
             icon: Icon(themeNotifier.value == ThemeMode.dark ? Icons.light_mode : Icons.dark_mode),
             onPressed: () {
@@ -312,6 +370,16 @@ class _ChatScreenState extends State<ChatScreen> {
             icon: const Icon(Icons.picture_as_pdf),
             tooltip: 'Download Chat as PDF',
             onPressed: _isLoading ? null : _exportChatToPDF,
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: () {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+              );
+            },
           ),
         ],
       ),
