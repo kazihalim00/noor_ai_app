@@ -6,7 +6,12 @@ final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
+
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint("Could not load .env: $e");
+  }
 
   runApp(const NoorAIApp());
 }
